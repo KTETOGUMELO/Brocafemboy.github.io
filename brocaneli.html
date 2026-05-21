@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Femboy Kingdom: Premium Kawaii Dynamic</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0d0926 0%, #22123a 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Comic Sans MS', sans-serif;
+            overflow: hidden;
+        }
+        #game-container {
+            border: 8px solid #ffb3d9;
+            border-radius: 28px;
+            box-shadow: 0 0 50px rgba(244, 143, 177, 0.6);
+            overflow: hidden;
+            background-color: #000;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <script>
+        const config = {
+            type: Phaser.AUTO,
+            width: 950,
+            height: 650,
+            parent: 'game-container',
+            physics: {
+                default: 'arcade',
+                arcade: { gravity: { y: 1600 }, debug: false }
+            },
+            scene: { preload: preload, create: create, update: update }
+        };
+
+        const game = new Phaser.Game(config);
+
+        let p1_cosmo, p2_guilherme, brocaneli, currentBoss;
+        let platforms, collectibles, enemies, bossProjectiles, bgLayer;
+        let keys;
+
+        let p1Knockback = false, p2Knockback = false;
+        let p1AttackCooldown = false, p2AttackCooldown = false;
+
+        let score = { cosmo: 0, guilherme: 0 };
+        let stylePoints = { cosmo: 0, guilherme: 0 };
+        let bossHp = 0, bossMaxHp = 120;
+       
+        let scoreText, phaseText, bossBar, bossBarBg;
+        let currentChapter = 0, dialogueIndex = 0;
+        let gameState = 'STORY';
+
+        let dialogueBox, nameText, dialogueText, hintText;
+        let cinemaCosmo, cinemaGui, cinemaBrocaneli, cinemaBoss;
+        let lastRoundWinner = 'nenhum';
+
+        const phaseStyles = [
+            { isBoss: false, name: "Fase 1: Jardim das Rosas e Doces", bg: ['#fff0f5', '#ffb6c1'], ground: '#ff69b4', plat: '#ffffff', stroke: '#ff4081', layout: [ {x: 200, y: 490, w: 150}, {x: 750, y: 490, w: 150}, {x: 475, y: 370, w: 180}, {x: 475, y: 240, w: 140} ] },
+            { isBoss: false, name: "Fase 2: Labirinto de Neon Estelar", bg: ['#1a0033', '#0a001a'], ground: '#d500f9', plat: '#120024', stroke: '#00e5ff', layout: [ {x: 180, y: 470, w: 140}, {x: 770, y: 470, w: 140}, {x: 320, y: 330, w: 150}, {x: 630, y: 330, w: 150} ] },
+            { isBoss: true,  bossKey: 'astolfo', name: "CONFRONTO LENDÁRIO: Astolfo", bg: ['#3e0624', '#1a000e'], ground: '#ff4081', plat: '#260014', stroke: '#ff80ab', layout: [ {x: 260, y: 440, w: 160}, {x: 690, y: 440, w: 160} ] },
+            { isBoss: false, name: "Fase 3: Santuário das Nuvens Pastel", bg: ['#e3f2fd', '#bbdefb'], ground: '#ffffff', plat: '#fff5f8', stroke: '#f48fb1', layout: [ {x: 150, y: 480, w: 140}, {x: 800, y: 480, w: 140}, {x: 475, y: 360, w: 220}, {x: 475, y: 220, w: 130} ] },
+            { isBoss: true,  bossKey: 'felix', name: "CONFRONTO FINAL: Felix Argyle", bg: ['#0a192f', '#020c1b'], ground: '#00e5ff', plat: '#06162d', stroke: '#29b6f6', layout: [ {x: 220, y: 460, w: 140}, {x: 730, y: 460, w: 140}, {x: 475, y: 330, w: 180} ] }
+        ];
+
+        function getDynamicScript(chapter, winner) {
+            if (chapter === 0) {
+                return [
+                    { name: "Cosmo", speaker: "cosmo", text: "Guilherme, olhe o meu visual novo! Essa bolsinha de coração combinou muito com o meu vestido de maid!" },
+                    { name: "Guilherme", speaker: "gui", text: "Ficou uma gracinha, Cosmo! E veja as minhas asinhas de anjo nas costas! Agora sim estamos prontos para coletar os tesouros raros do Rei Brocaneli!" },
+                    { name: "Rei Brocaneli", speaker: "brocaneli", text: "Hihihi! Que fofura extrema! Coloquei apenas um tesouro ultra-raro no topo de cada mapa. Quem conseguir pegar vai subir com muito mais estilo!" }
+                ];
+            }
+            if (chapter === 1) {
+                return [
+                    { name: "Guilherme", speaker: "gui", text: "Pegar aquele item único exige muita pressa, você viu como o jogo ficou rápido e dinâmico?!" },
+                    { name: "Cosmo", speaker: "cosmo", text: "Sim! E adorei que agora conseguimos virar e olhar pros lados de um jeito super charmoso enquanto corremos!" },
+                    { name: "Rei Brocaneli", speaker: "brocaneli", text: "Vocês estão se movimentando muito bem! Mas fiquem espertos, meus guardiões reais estão logo acima!" }
+                ];
+            }
+            if (chapter === 2) {
+                return [
+                    { name: "Astolfo", speaker: "boss", text: "Yo! Que roupas adoráveis! Vocês têm acessórios incríveis, mas será que conseguem desviar das minhas estrelas cadentes?!" },
+                    { name: "Cosmo", speaker: "cosmo", text: "O Astolfo é muito estiloso! Vamos focar, Guilherme, use suas investidas rápidas!" }
+                ];
+            }
+            if (chapter === 3) {
+                return [
+                    { name: "Astolfo", speaker: "boss", text: "Uau, que sincronia fashion! Vocês venceram com total elegância. Boa sorte no topo!" },
+                    { name: "Guilherme", speaker: "gui", text: "Conseguimos! Agora rumo às Nuvens Pastel. Só um de nós vai conseguir o prêmio supremo do topo!" }
+                ];
+            }
+            if (chapter === 4) {
+                return [
+                    { name: "Felix Argyle", speaker: "boss", text: "Nyaaa! Felix chegou! Prontos para dançar contra a magia da água do gatinho mais sapeca?" },
+                    { name: "Cosmo", speaker: "cosmo", text: "É o momento decisivo! Vamos dar tudo de nós nessa passarela de combate!" }
+                ];
+            }
+            return [];
+        }
+
+        function preload() {
+            // --- PROCEDURAL GENERATION: COSMO (FRENTE, ESQUERDA, DIREITA) ---
+            // Frente
+            generateCanvasTexture(this, 'cosmo_front', 48, 56, (ctx) => {
+                ctx.fillStyle = '#a8dcff'; ctx.beginPath(); ctx.roundRect(4, 4, 40, 46, 14); ctx.fill();
+                ctx.fillStyle = '#4ba3e3'; ctx.fillRect(6, 34, 36, 20);
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(12, 34, 24, 14, 4); ctx.fill();
+                ctx.fillStyle = '#fff0eb'; ctx.beginPath(); ctx.roundRect(10, 12, 28, 28, 10); ctx.fill();
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(12, 8, 8, 0, Math.PI*2); ctx.arc(36, 8, 8, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ff4081'; ctx.beginPath(); ctx.arc(14, 42, 4, 0, Math.PI*2); ctx.fill(); // Bolsinha de coração charmosa na frente
+                ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(18, 24, 3.5, 0, Math.PI*2); ctx.arc(30, 24, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(17, 23, 1, 0, Math.PI*2); ctx.arc(29, 23, 1, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffb3c6'; ctx.beginPath(); ctx.arc(14, 31, 3.5, 0, Math.PI*2); ctx.arc(34, 31, 3.5, 0, Math.PI*2); ctx.fill();
+            });
+            // Esquerda
+            generateCanvasTexture(this, 'cosmo_left', 48, 56, (ctx) => {
+                ctx.fillStyle = '#a8dcff'; ctx.beginPath(); ctx.roundRect(2, 4, 40, 46, 14); ctx.fill();
+                ctx.fillStyle = '#4ba3e3'; ctx.fillRect(8, 34, 32, 20);
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(8, 34, 12, 14);
+                ctx.fillStyle = '#fff0eb'; ctx.beginPath(); ctx.roundRect(6, 12, 28, 28, 10); ctx.fill();
+                ctx.fillStyle = '#ff4081'; ctx.beginPath(); ctx.arc(32, 42, 5, 0, Math.PI*2); ctx.fill(); // Alça da Bolsinha visível de lado
+                ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(12, 24, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffb3c6'; ctx.beginPath(); ctx.arc(9, 31, 3.5, 0, Math.PI*2); ctx.fill();
+            });
+            // Direita
+            generateCanvasTexture(this, 'cosmo_right', 48, 56, (ctx) => {
+                ctx.fillStyle = '#a8dcff'; ctx.beginPath(); ctx.roundRect(6, 4, 40, 46, 14); ctx.fill();
+                ctx.fillStyle = '#4ba3e3'; ctx.fillRect(8, 34, 32, 20);
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(28, 34, 12, 14);
+                ctx.fillStyle = '#fff0eb'; ctx.beginPath(); ctx.roundRect(14, 12, 28, 28, 10); ctx.fill();
+                ctx.fillStyle = '#ff4081'; ctx.beginPath(); ctx.arc(16, 42, 5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(36, 24, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffb3c6'; ctx.beginPath(); ctx.arc(39, 31, 3.5, 0, Math.PI*2); ctx.fill();
+            });
+
+            // --- PROCEDURAL GENERATION: GUILHERME (FRENTE, ESQUERDA, DIREITA) ---
+            // Frente
+            generateCanvasTexture(this, 'guilherme_front', 48, 56, (ctx) => {
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(4, 30, 8, 0, Math.PI*2); ctx.arc(44, 30, 8, 0, Math.PI*2); ctx.fill(); // Asinhas fofas atrás
+                ctx.fillStyle = '#ff82b2'; ctx.beginPath(); ctx.roundRect(3, 4, 42, 48, 14); ctx.fill();
+                ctx.fillStyle = '#e91e63'; ctx.fillRect(6, 36, 36, 18);
+                ctx.fillStyle = '#fff0eb'; ctx.beginPath(); ctx.roundRect(10, 12, 28, 28, 10); ctx.fill();
+                ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.moveTo(18, 10); ctx.lineTo(24, 2); ctx.lineTo(30, 10); ctx.fill();
+                ctx.fillStyle = '#e91e63'; ctx.beginPath(); ctx.arc(17, 24, 3.5, 0, Math.PI*2); ctx.arc(31, 24, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffccd5'; ctx.beginPath(); ctx.arc(13, 31, 3.5, 0, Math.PI*2); ctx.arc(35, 31, 3.5, 0, Math.PI*2); ctx.fill();
+            });
+            // Esquerda
+            generateCanvasTexture(this, 'guilherme_left', 48, 56, (ctx) => {
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(42, 30, 8, 0, Math.PI*2); ctx.fill(); // Asa visível do lado oposto
+                ctx.fillStyle = '#ff82b2'; ctx.beginPath(); ctx.roundRect(2, 4, 42, 48, 14); ctx.fill();
+                ctx.fillStyle = '#e91e63'; ctx.fillRect(8, 36, 32, 18);
+                ctx.fillStyle = '#fff0eb'; ctx.beginPath(); ctx.roundRect(6, 12, 28, 28, 10); ctx.fill();
+                ctx.fillStyle = '#e91e63'; ctx.beginPath(); ctx.arc(13, 24, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffccd5'; ctx.beginPath(); ctx.arc(10, 31, 3.5, 0, Math.PI*2); ctx.fill();
+            });
+            // Direita
+            generateCanvasTexture(this, 'guilherme_right', 48, 56, (ctx) => {
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(6, 30, 8, 0, Math.PI*2); ctx.fill(); // Asa visível
+                ctx.fillStyle = '#ff82b2'; ctx.beginPath(); ctx.roundRect(4, 4, 42, 48, 14); ctx.fill();
+                ctx.fillStyle = '#e91e63'; ctx.fillRect(8, 36, 32, 18);
+                ctx.fillStyle = '#fff0eb'; ctx.beginPath(); ctx.roundRect(14, 12, 28, 28, 10); ctx.fill();
+                ctx.fillStyle = '#e91e63'; ctx.beginPath(); ctx.arc(35, 24, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffccd5'; ctx.beginPath(); ctx.arc(38, 31, 3.5, 0, Math.PI*2); ctx.fill();
+            });
+
+            // --- OUTROS ELEMENTOS ---
+            generateCanvasTexture(this, 'brocaneli', 64, 82, (ctx) => {
+                ctx.fillStyle = '#311b92'; ctx.beginPath(); ctx.roundRect(2, 22, 60, 56, 16); ctx.fill();
+                ctx.fillStyle = '#ff4081'; ctx.fillRect(18, 22, 28, 56);
+                ctx.fillStyle = '#fff3f8'; ctx.beginPath(); ctx.roundRect(14, 18, 36, 40, 14); ctx.fill();
+                ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.roundRect(8, 12, 48, 24, 8); ctx.fill();
+                ctx.fillStyle = '#512da8'; ctx.beginPath(); ctx.moveTo(12, 14); ctx.lineTo(4, -2); ctx.lineTo(22, 12); ctx.fill(); ctx.beginPath(); ctx.moveTo(52, 14); ctx.lineTo(60, -2); ctx.lineTo(42, 12); ctx.fill();
+                ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.moveTo(22, 12); ctx.lineTo(32, 2); ctx.lineTo(42, 12); ctx.fill();
+                ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(32, 8, 3, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(18, 34); ctx.lineTo(25, 37); ctx.lineTo(18, 40); ctx.stroke();
+                ctx.fillStyle = '#ff4081'; ctx.beginPath(); ctx.arc(44, 35, 4.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ff4081'; ctx.beginPath(); ctx.arc(32, 48, 6, 0, Math.PI, false); ctx.fill();
+            });
+
+            generateCanvasTexture(this, 'slime', 36, 28, (ctx) => {
+                ctx.fillStyle = '#ff7ea5'; ctx.beginPath(); ctx.roundRect(0, 4, 36, 24, 12); ctx.fill();
+                ctx.fillStyle = '#4caf50'; ctx.fillRect(16, 0, 4, 6); ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(18, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(11, 14, 4.5, 0, Math.PI*2); ctx.arc(25, 14, 4.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(11, 14, 2, 0, Math.PI*2); ctx.arc(25, 14, 2, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ffcbd7'; ctx.beginPath(); ctx.arc(6, 20, 3, 0, Math.PI*2); ctx.arc(30, 20, 3, 0, Math.PI*2); ctx.fill();
+            });
+
+            generateCanvasTexture(this, 'ghost', 32, 38, (ctx) => {
+                ctx.fillStyle = '#e8c7fc'; ctx.beginPath(); ctx.roundRect(2, 2, 28, 30, 14); ctx.fill(); ctx.fillRect(2, 16, 28, 18);
+                ctx.fillStyle = '#ff4081'; ctx.beginPath(); ctx.arc(6, 6, 4, 0, Math.PI*2); ctx.arc(12, 10, 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#2b0f47'; ctx.beginPath(); ctx.arc(12, 16, 2.5, 0, Math.PI*2); ctx.arc(22, 16, 2.5, 0, Math.PI*2); ctx.fill();
+            });
+
+            generateCanvasTexture(this, 'astolfo', 65, 80, (ctx) => {
+                ctx.fillStyle = '#ff80ab'; ctx.beginPath(); ctx.roundRect(5, 20, 55, 55, 15); ctx.fill();
+                ctx.fillStyle = '#fff5f8'; ctx.beginPath(); ctx.roundRect(12, 25, 41, 50, 10); ctx.fill();
+                ctx.fillStyle = '#8e24aa'; ctx.beginPath(); ctx.arc(22, 42, 5, 0, Math.PI*2); ctx.arc(43, 42, 5, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(5, 75); ctx.lineTo(60, 10); ctx.stroke();
+            });
+
+            generateCanvasTexture(this, 'felix', 65, 80, (ctx) => {
+                ctx.fillStyle = '#ffb74d'; ctx.beginPath(); ctx.roundRect(5, 20, 55, 55, 15); ctx.fill();
+                ctx.fillStyle = '#fff9c4'; ctx.beginPath(); ctx.roundRect(12, 25, 41, 50, 10); ctx.fill();
+                ctx.fillStyle = '#009688'; ctx.beginPath(); ctx.arc(22, 42, 5, 0, Math.PI*2); ctx.arc(43, 42, 5, 0, Math.PI*2); ctx.fill();
+            });
+
+            // Coração Supremo Único (Item raro da fase)
+            generateCanvasTexture(this, 'super_heart', 32, 32, (ctx) => {
+                ctx.fillStyle = '#ff1493';
+                ctx.beginPath(); ctx.arc(10, 10, 8, 0, Math.PI*2); ctx.arc(22, 10, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(2, 14); ctx.lineTo(16, 30); ctx.lineTo(30, 14); ctx.fill();
+                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(8, 8, 2, 0, Math.PI*2); ctx.fill(); // Brilho do item
+            });
+
+            generateCanvasTexture(this, 'star_bullet', 16, 16, (ctx) => { ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(8, 8, 8, 0, Math.PI*2); ctx.fill(); });
+            generateCanvasTexture(this, 'water_bullet', 18, 18, (ctx) => { ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(9, 9, 9, 0, Math.PI*2); ctx.fill(); });
+
+            buildDynamicTextures(this);
+        }
+
+        function create() {
+            bgLayer = this.add.image(475, 325, 'sky_0');
+            platforms = this.physics.add.staticGroup();
+            enemies = this.physics.add.group();
+            collectibles = this.physics.add.group();
+            bossProjectiles = this.physics.add.group();
+           
+            generateMapLayout(this, 0);
+
+            // Spawna com a textura frontal padrão
+            p1_cosmo = this.physics.add.sprite(180, 500, 'cosmo_front').setBounce(0.05).setCollideWorldBounds(true);
+            p1_cosmo.body.setCircle(16, 8, 20); p1_cosmo.body.setFrictionX(0); p1_cosmo.body.setDragX(0);
+
+            p2_guilherme = this.physics.add.sprite(770, 500, 'guilherme_front').setBounce(0.05).setCollideWorldBounds(true);
+            p2_guilherme.body.setCircle(16, 8, 20); p2_guilherme.body.setFrictionX(0); p2_guilherme.body.setDragX(0);
+
+            brocaneli = this.physics.add.staticSprite(475, 95, 'brocaneli');
+            this.tweens.add({ targets: brocaneli, y: 106, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+            currentBoss = this.physics.add.sprite(475, -200, 'astolfo').setCollideWorldBounds(true).setVisible(false);
+            currentBoss.body.setAllowGravity(false);
+
+            spawnEntities(this, 0);
+
+            this.physics.add.collider(p1_cosmo, platforms); this.physics.add.collider(p2_guilherme, platforms);
+            this.physics.add.collider(p1_cosmo, p2_guilherme);
+            this.physics.add.collider(enemies, platforms);
+            this.physics.add.collider(collectibles, platforms);
+
+            this.physics.add.overlap(p1_cosmo, brocaneli, () => winRound(this, 'cosmo'), null, this);
+            this.physics.add.overlap(p2_guilherme, brocaneli, () => winRound(this, 'guilherme'), null, this);
+            this.physics.add.overlap(p1_cosmo, collectibles, (p, c) => collectItem(p, c, 'cosmo'), null, this);
+            this.physics.add.overlap(p2_guilherme, collectibles, (p, c) => collectItem(p, c, 'guilherme'), null, this);
+            this.physics.add.overlap(p1_cosmo, enemies, (p, e) => handleImpact(this, p, e, 'cosmo'), null, this);
+            this.physics.add.overlap(p2_guilherme, enemies, (p, e) => handleImpact(this, p, e, 'guilherme'), null, this);
+           
+            this.physics.add.overlap(p1_cosmo, bossProjectiles, (p, pr) => hitPlayerWithProjectile(this, p, pr, 'cosmo'), null, this);
+            this.physics.add.overlap(p2_guilherme, bossProjectiles, (p, pr) => hitPlayerWithProjectile(this, p, pr, 'guilherme'), null, this);
+
+            scoreText = this.add.text(25, 20, 'Cosmo: 0 (Estilo: 0) | Gui: 0 (Estilo: 0)', { font: 'bold 18px "Comic Sans MS"', fill: '#fff', backgroundColor: 'rgba(255, 20, 147, 0.6)', padding: 8 });
+            phaseText = this.add.text(925, 20, phaseStyles[0].name, { font: 'bold 16px "Comic Sans MS"', fill: '#fff', backgroundColor: '#4a148c', padding: 8 }).setOrigin(1, 0);
+
+            bossBarBg = this.add.graphics().fillStyle(0x333333, 1).fillRect(275, 75, 400, 16).setVisible(false);
+            bossBar = this.add.graphics().setVisible(false);
+
+            keys = this.input.keyboard.addKeys({
+                w: Phaser.Input.Keyboard.KeyCodes.W, a: Phaser.Input.Keyboard.KeyCodes.A, s: Phaser.Input.Keyboard.KeyCodes.S, d: Phaser.Input.Keyboard.KeyCodes.D,
+                up: Phaser.Input.Keyboard.KeyCodes.UP, left: Phaser.Input.Keyboard.KeyCodes.LEFT, down: Phaser.Input.Keyboard.KeyCodes.DOWN, right: Phaser.Input.Keyboard.KeyCodes.RIGHT
+            });
+
+            cinemaCosmo = this.add.sprite(180, 320, 'cosmo_front').setScale(2.5).setVisible(false);
+            cinemaGui = this.add.sprite(770, 320, 'guilherme_front').setScale(2.5).setVisible(false);
+            cinemaBrocaneli = this.add.sprite(475, 230, 'brocaneli').setScale(2.5).setVisible(false);
+            cinemaBoss = this.add.sprite(475, 230, 'astolfo').setScale(2.4).setVisible(false);
+
+            dialogueBox = this.add.graphics().fillStyle(0xffffff, 0.98).lineStyle(6, 0xff4081, 1).fillRoundedRect(75, 460, 800, 140, 20).strokeRoundedRect(75, 460, 800, 140, 20);
+            nameText = this.add.text(110, 475, '', { font: 'bold 24px "Comic Sans MS"' });
+            dialogueText = this.add.text(110, 515, '', { font: '19px "Comic Sans MS"', fill: '#222', wordWrap: { width: 730 } });
+            hintText = this.add.text(710, 570, '[ Clique para Avançar ]', { font: 'bold 13px "Comic Sans MS"', fill: '#e040fb' });
+
+            startCinemaMode();
+            this.input.on('pointerdown', () => handleDialogueAdvance(this));
+        }
+
+        function update() {
+            if (gameState !== 'GAMEPLAY') {
+                p1_cosmo.setVelocityX(0); p2_guilherme.setVelocityX(0);
+                if (currentBoss.active) currentBoss.setVelocity(0, 0);
+                return;
+            }
+
+            let distance = Phaser.Math.Distance.Between(p1_cosmo.x, p1_cosmo.y, p2_guilherme.x, p2_guilherme.y);
+
+            // Ataques rápidos
+            if (Phaser.Input.Keyboard.JustDown(keys.s) && !p1Knockback && !p1AttackCooldown) {
+                animateAction(this, p1_cosmo, 'attack'); p1AttackCooldown = true; this.time.delayedCall(300, () => p1AttackCooldown = false);
+                if (phaseStyles[currentChapter].isBoss && Phaser.Math.Distance.Between(p1_cosmo.x, p1_cosmo.y, currentBoss.x, currentBoss.y) < 100) {
+                    hitBoss(this, 'cosmo');
+                } else if (distance < 85) {
+                    triggerPvPBlast(this, p1_cosmo, p2_guilherme, 'guilherme');
+                }
+            }
+
+            if (Phaser.Input.Keyboard.JustDown(keys.down) && !p2Knockback && !p2AttackCooldown) {
+                animateAction(this, p2_guilherme, 'attack'); p2AttackCooldown = true; this.time.delayedCall(300, () => p2AttackCooldown = false);
+                if (phaseStyles[currentChapter].isBoss && Phaser.Math.Distance.Between(p2_guilherme.x, p2_guilherme.y, currentBoss.x, currentBoss.y) < 100) {
+                    hitBoss(this, 'guilherme');
+                } else if (distance < 85) {
+                    triggerPvPBlast(this, p2_guilherme, p1_cosmo, 'cosmo');
+                }
+            }
+
+            // --- SISTEMA DE FRENTE E LADO (DIRECIONAL): COSMO ---
+            if (!p1Knockback) {
+                if (keys.a.isDown) {
+                    p1_cosmo.setVelocityX(-390);
+                    p1_cosmo.setTexture('cosmo_left');
+                } else if (keys.d.isDown) {
+                    p1_cosmo.setVelocityX(390);
+                    p1_cosmo.setTexture('cosmo_right');
+                } else {
+                    p1_cosmo.setVelocityX(0);
+                    p1_cosmo.setTexture('cosmo_front'); // Volta a olhar para frente parado
+                }
+                if (keys.w.isDown && p1_cosmo.body.touching.down) { p1_cosmo.setVelocityY(-750); animateAction(this, p1_cosmo, 'jump'); }
+            }
+
+            // --- SISTEMA DE FRENTE E LADO (DIRECIONAL): GUILHERME ---
+            if (!p2Knockback) {
+                if (keys.left.isDown) {
+                    p2_guilherme.setVelocityX(-390);
+                    p2_guilherme.setTexture('guilherme_left');
+                } else if (keys.right.isDown) {
+                    p2_guilherme.setVelocityX(390);
+                    p2_guilherme.setTexture('guilherme_right');
+                } else {
+                    p2_guilherme.setVelocityX(0);
+                    p2_guilherme.setTexture('guilherme_front'); // Volta a olhar para frente parado
+                }
+                if (keys.up.isDown && p2_guilherme.body.touching.down) { p2_guilherme.setVelocityY(-750); animateAction(this, p2_guilherme, 'jump'); }
+            }
+
+            // Comportamento dos Chefes e Monstros
+            if (phaseStyles[currentChapter].isBoss) {
+                let style = phaseStyles[currentChapter];
+                if (style.bossKey === 'astolfo') {
+                    currentBoss.timeCounter = (currentBoss.timeCounter || 0) + 0.02;
+                    currentBoss.x = 475 + Math.sin(currentBoss.timeCounter * 1.5) * 200;
+                    currentBoss.y = 240 + Math.cos(currentBoss.timeCounter) * 40;
+
+                    if (Phaser.Math.Between(0, 100) > 96) {
+                        let bullet = bossProjectiles.create(currentBoss.x, currentBoss.y + 20, 'star_bullet');
+                        bullet.body.setAllowGravity(false); bullet.setVelocity(Phaser.Math.Between(-220, 220), 250);
+                    }
+                } else if (style.bossKey === 'felix') {
+                    currentBoss.timeCounter = (currentBoss.timeCounter || 0) + 0.015;
+                    if (Phaser.Math.Between(0, 500) > 491) {
+                        currentBoss.setPosition(Phaser.Math.Between(200, 750), Phaser.Math.Between(200, 380));
+                        this.cameras.main.flash(100, 0, 229, 255);
+                    }
+                    if (Phaser.Math.Between(0, 100) > 96) {
+                        let targetPlayer = Phaser.Math.Between(0, 10) > 5 ? p1_cosmo : p2_guilherme;
+                        let bullet = bossProjectiles.create(currentBoss.x, currentBoss.y, 'water_bullet');
+                        bullet.body.setAllowGravity(false); this.physics.moveToObject(bullet, targetPlayer, 300);
+                    }
+                }
+            } else {
+                enemies.getChildren().forEach((enemy) => {
+                    if (enemy.texture.key === 'ghost') {
+                        enemy.timeCounter = (enemy.timeCounter || 0) + 0.03;
+                        enemy.y = enemy.baseY + Math.sin(enemy.timeCounter) * 25;
+                        if (enemy.x > enemy.maxX) enemy.setVelocityX(-130); else if (enemy.x < enemy.minX) enemy.setVelocityX(130);
+                    } else if (enemy.texture.key === 'slime') {
+                        enemy.timeCounter = (enemy.timeCounter || 0) + 0.12;
+                        enemy.scaleY = 1 + Math.sin(enemy.timeCounter) * 0.1;
+                        if (enemy.x >= enemy.maxX) enemy.setVelocityX(-120); else if (enemy.x <= enemy.minX) enemy.setVelocityX(120);
+                    }
+                });
+            }
+        }
+
+        function hitBoss(scene, playerKey) {
+            bossHp -= 10; stylePoints[playerKey] += 50; updateHUDText(); drawBossBar();
+            scene.tweens.add({ targets: currentBoss, scaleX: 1.8, scaleY: 1.8, duration: 80, yoyo: true });
+            scene.cameras.main.shake(100, 0.01);
+            if (bossHp <= 0) winRound(scene, playerKey);
+        }
+
+        function hitPlayerWithProjectile(scene, player, projectile, playerKey) {
+            projectile.destroy();
+            let push = player.x > currentBoss.x ? 1 : -1;
+            if (playerKey === 'cosmo') {
+                p1Knockback = true; player.setVelocityX(push * 520).setVelocityY(-400);
+                scene.time.delayedCall(300, () => p1Knockback = false);
+            } else {
+                p2Knockback = true; player.setVelocityX(push * 520).setVelocityY(-400);
+                scene.time.delayedCall(300, () => p2Knockback = false);
+            }
+        }
+
+        function drawBossBar() {
+            bossBar.clear(); bossBar.fillStyle(0xff1493, 1);
+            let width = (bossHp / bossMaxHp) * 400;
+            if (width > 0) bossBar.fillRect(275, 75, width, 16);
+        }
+
+        function startCinemaMode() {
+            gameState = 'STORY'; toggleGameplayVisibility(false); toggleInterfaceVisibility(true);
+            bossBarBg.setVisible(false); bossBar.setVisible(false);
+            cinemaCosmo.setVisible(true).setPosition(180, 320).setAlpha(0.6);
+            cinemaGui.setVisible(true).setPosition(770, 320).setAlpha(0.6);
+           
+            if (phaseStyles[currentChapter].isBoss) {
+                cinemaBrocaneli.setVisible(false);
+                cinemaBoss.setTexture(phaseStyles[currentChapter].bossKey).setVisible(true).setPosition(475, 230).setAlpha(1);
+            } else {
+                cinemaBoss.setVisible(false);
+                cinemaBrocaneli.setVisible(true).setPosition(475, 230).setAlpha(1);
+            }
+            dialogueIndex = 0; renderNextDialogueLine();
+        }
+
+        function renderNextDialogueLine() {
+            let currentScript = getDynamicScript(currentChapter, lastRoundWinner);
+            if (dialogueIndex >= currentScript.length) { exitCinemaToGameplay(); return; }
+
+            let line = currentScript[dialogueIndex];
+            dialogueText.setText(line.text); nameText.setText(line.name);
+            cinemaCosmo.setAlpha(0.5); cinemaGui.setAlpha(0.5); cinemaBrocaneli.setAlpha(0.6); cinemaBoss.setAlpha(0.6);
+
+            if (line.speaker === 'cosmo') { cinemaCosmo.setAlpha(1); nameText.setStyle({ fill: '#3399ff' }); }
+            else if (line.speaker === 'gui') { cinemaGui.setAlpha(1); nameText.setStyle({ fill: '#ff3399' }); }
+            else if (line.speaker === 'brocaneli') { cinemaBrocaneli.setAlpha(1); nameText.setStyle({ fill: '#ffd700' }); }
+            else if (line.speaker === 'boss') { cinemaBoss.setAlpha(1); nameText.setStyle({ fill: '#ff4081' }); }
+           
+            executeCinemaTween(line.speaker === 'boss' ? cinemaBoss : (line.speaker === 'gui' ? cinemaGui : cinemaCosmo));
+        }
+
+        function executeCinemaTween(target) {
+            if (target && target.visible) game.scene.scenes[0].tweens.add({ targets: target, y: target.y - 25, duration: 120, yoyo: true });
+        }
+
+        function handleDialogueAdvance(scene) {
+            if (gameState !== 'STORY') return;
+            dialogueIndex++; renderNextDialogueLine();
+        }
+
+        function exitCinemaToGameplay() {
+            cinemaCosmo.setVisible(false); cinemaGui.setVisible(false); cinemaBrocaneli.setVisible(false); cinemaBoss.setVisible(false);
+            toggleInterfaceVisibility(false); toggleGameplayVisibility(true);
+            if (currentChapter < 5) changePhase(game.scene.scenes[0], currentChapter);
+            gameState = 'GAMEPLAY';
+        }
+
+        function winRound(scene, winner) {
+            if (gameState !== 'GAMEPLAY') return;
+            score[winner]++; lastRoundWinner = winner;
+            scene.cameras.main.flash(400, 255, 182, 193);
+            currentChapter++;
+            if (currentChapter === 5) processFinalEndingLayout();
+            startCinemaMode();
+        }
+
+        function processFinalEndingLayout() {
+            let master = score.cosmo > score.guilherme ? "Cosmo" : "Guilherme";
+            getDynamicScript = () => [
+                { name: "Rei Brocaneli", speaker: "brocaneli", text: `Incrível! Que jornada fabulosa! Vocês superaram Astolfo, Felix e pegaram todos os corações Supremos! O monarca definitivo do estilo é ${master}!` },
+                { name: "Rei Brocaneli", speaker: "brocaneli", text: "Venham os dois para os meus aposentos reais! Vamos celebrar com muito chá, doces e testar todos os acessórios novos! Vocês arrasaram! ✨ Nya!" }
+            ];
+        }
+
+        function changePhase(scene, idx) {
+            bgLayer.setTexture('sky_' + idx); phaseText.setText(phaseStyles[idx].name);
+            platforms.clear(true, true); bossProjectiles.clear(true, true);
+            generateMapLayout(scene, idx);
+            p1_cosmo.setPosition(180, 500).setVelocity(0, 0).setTexture('cosmo_front');
+            p2_guilherme.setPosition(770, 500).setVelocity(0, 0).setTexture('guilherme_front');
+           
+            let style = phaseStyles[idx];
+            if (style.isBoss) {
+                brocaneli.setVisible(false); enemies.clear(true, true); collectibles.clear(true, true);
+                currentBoss.setTexture(style.bossKey).setPosition(475, 250).setVisible(true).setActive(true);
+                currentBoss.body.setEnable(true); bossHp = bossMaxHp;
+                bossBarBg.setVisible(true); bossBar.setVisible(true); drawBossBar();
+            } else {
+                brocaneli.setVisible(true); currentBoss.setVisible(false).setActive(false); currentBoss.body.setEnable(false);
+                bossBarBg.setVisible(false); bossBar.setVisible(false); spawnEntities(scene, idx);
+            }
+            updateHUDText();
+        }
+
+        function generateMapLayout(scene, idx) {
+            platforms.create(475, 635, 'ground_' + idx);
+            let layout = phaseStyles[idx].layout;
+            layout.forEach((plat, i) => {
+                let pKey = `plat_${idx}_${i}`;
+                generateCanvasTexture(scene, pKey, plat.w, 26, (ctx) => {
+                    ctx.fillStyle = phaseStyles[idx].plat; ctx.beginPath(); ctx.roundRect(2, 2, plat.w - 4, 22, 10); ctx.fill();
+                    ctx.lineWidth = 3; ctx.strokeStyle = phaseStyles[idx].stroke; ctx.stroke();
+                });
+                platforms.create(plat.x, plat.y, pKey);
+            });
+        }
+
+        function spawnEntities(scene, idx) {
+            enemies.clear(true, true); collectibles.clear(true, true);
+            let layout = phaseStyles[idx].layout;
+
+            // Spawna os monstros de plataforma convencionais
+            layout.forEach((plat, i) => {
+                let leftBound = plat.x - (plat.w / 2) + 15;
+                let rightBound = plat.x + (plat.w / 2) - 15;
+
+                if (i % 2 === 0) {
+                    let slime = enemies.create(plat.x, plat.y - 25, 'slime');
+                    slime.minX = leftBound; slime.maxX = rightBound; slime.setVelocityX(120);
+                } else {
+                    let ghost = enemies.create(plat.x, plat.y - 40, 'ghost');
+                    ghost.body.setAllowGravity(false); ghost.baseY = plat.y - 45;
+                    ghost.minX = leftBound; ghost.maxX = rightBound; ghost.setVelocityX(70);
+                }
+            });
+
+            // SISTEMA DE ITEM ÚNICO POR FASE: Spawna apenas um super coração raro na última plataforma flutuante (a mais alta)
+            let topPlat = layout[layout.length - 1];
+            let col = collectibles.create(topPlat.x, topPlat.y - 65, 'super_heart');
+            col.body.setAllowGravity(false);
+            scene.tweens.add({ targets: col, y: col.y - 12, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        }
+
+        function triggerPvPBlast(scene, attacker, target, targetKey) {
+            let push = target.x >= attacker.x ? 1 : -1;
+            scene.tweens.add({ targets: target, scaleX: 0.6, scaleY: 1.4, duration: 100, yoyo: true });
+            if (targetKey === 'cosmo') {
+                p1Knockback = true; p1_cosmo.setVelocityX(push * 650).setVelocityY(-450);
+                scene.time.delayedCall(300, () => p1Knockback = false);
+            } else {
+                p2Knockback = true; p2_guilherme.setVelocityX(push * 650).setVelocityY(-450);
+                scene.time.delayedCall(300, () => p2Knockback = false);
+            }
+        }
+
+        function handleImpact(scene, player, enemy, playerKey) {
+            let push = player.x > enemy.x ? 1 : -1;
+            if (playerKey === 'cosmo' && !p1Knockback) {
+                p1Knockback = true; player.setVelocityX(push * 450).setVelocityY(-350);
+                scene.time.delayedCall(250, () => p1Knockback = false);
+            } else if (playerKey === 'guilherme' && !p2Knockback) {
+                p2Knockback = true; player.setVelocityX(push * 450).setVelocityY(-350);
+                scene.time.delayedCall(250, () => p2Knockback = false);
+            }
+        }
+
+        function collectItem(player, item, playerKey) {
+            item.disableBody(true, true);
+            stylePoints[playerKey] += 150; // Bônus gigante por pegar o único item raro do mapa!
+            updateHUDText();
+            player.setVelocityY(-800);
+        }
+
+        function updateHUDText() { scoreText.setText(`Cosmo: ${score.cosmo} (Estilo: ${stylePoints.cosmo}) | Gui: ${score.guilherme} (Estilo: ${stylePoints.guilherme})`); }
+        function toggleGameplayVisibility(visible) { p1_cosmo.setVisible(visible); p2_guilherme.setVisible(visible); brocaneli.setVisible(visible && !phaseStyles[currentChapter].isBoss); enemies.setVisible(visible); collectibles.setVisible(visible); platforms.setVisible(visible); if(!visible) currentBoss.setVisible(false); }
+        function toggleInterfaceVisibility(visible) { dialogueBox.setVisible(visible); nameText.setVisible(visible); dialogueText.setVisible(visible); hintText.setVisible(visible); }
+        function animateAction(scene, sprite, type) { if (type === 'jump') scene.tweens.add({ targets: sprite, scaleY: 1.3, scaleX: 0.8, duration: 110, yoyo: true }); else scene.tweens.add({ targets: sprite, scaleX: 1.4, scaleY: 0.7, duration: 80, yoyo: true }); }
+        function generateCanvasTexture(scene, key, w, h, drawFunc) { let canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h; drawFunc(canvas.getContext('2d')); scene.textures.addCanvas(key, canvas); }
+       
+        function buildDynamicTextures(scene) {
+            phaseStyles.forEach((style, idx) => {
+                generateCanvasTexture(scene, 'sky_' + idx, 950, 650, (ctx) => {
+                    let grad = ctx.createLinearGradient(0, 0, 0, 650); grad.addColorStop(0, style.bg[0]); grad.addColorStop(1, style.bg[1]);
+                    ctx.fillStyle = grad; ctx.fillRect(0, 0, 950, 650);
+                });
+                generateCanvasTexture(scene, 'ground_' + idx, 950, 30, (ctx) => { ctx.fillStyle = style.ground; ctx.fillRect(0, 0, 950, 30); });
+            });
+        }
+    </script>
+</body>
+</html>
